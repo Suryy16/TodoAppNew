@@ -1,40 +1,21 @@
 package com.example.todoappnew.pages
 
+import android.app.Activity
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MailOutline
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,26 +30,69 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.credentials.CredentialManager
 import androidx.navigation.NavController
 import com.example.todoappnew.AuthState
 import com.example.todoappnew.AuthViewModel
 import com.example.todoappnew.R
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authViewModel: AuthViewModel){
+fun LoginPage(
+    modifier: Modifier = Modifier,
+    navController: NavController,
+    authViewModel: AuthViewModel
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    val authState = authViewModel.authState.observeAsState()
+    val authState by authViewModel.authState.observeAsState()
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    val credentialManager = CredentialManager.create(context)
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(authState.value) {
-        when(authState.value){
-            is AuthState.Authenticated -> navController.navigate("home")
-            is AuthState.Error -> Toast.makeText(context, (authState.value as AuthState.Error).message, Toast.LENGTH_SHORT).show()
-            else -> Unit
+    // Configure Google Sign In
+    val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+        .requestIdToken(context.getString(R.string.default_web_client_id))
+        .requestEmail()
+        .build()
+
+    val googleSignInClient = GoogleSignIn.getClient(context as Activity, gso)
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                account?.idToken?.let { token ->
+                    scope.launch {
+                        authViewModel.firebaseAuthWithGoogle(token)
+                    }
+                }
+            } catch (e: ApiException) {
+                Log.e("LoginPage", "Google sign in failed", e)
+                Toast.makeText(context, "Google sign in failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    LaunchedEffect(authState) {
+        when (authState) {
+            is AuthState.Authenticated -> {
+                Log.d("LoginPage", "Authentication successful, navigating to TodoApp")
+                navController.navigate("todoApp") {
+                    popUpTo("login") { inclusive = true }
+                }
+            }
+            is AuthState.Error -> {
+                val errorMessage = (authState as AuthState.Error).message
+                Log.e("LoginPage", "Authentication error: $errorMessage")
+                Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+            }
+            else -> {}
         }
     }
 
@@ -80,8 +104,8 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
             .background(Color(0xFF81248A))
             .offset(y = (-30).dp)
     ) {
-        //Slicing Logo and Subtitle
-        Column (horizontalAlignment = Alignment.CenterHorizontally){
+        // Logo and Subtitle
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
                 painter = painterResource(id = R.drawable.logo),
                 contentDescription = "logo",
@@ -103,13 +127,14 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
 
         Spacer(modifier = Modifier.height(50.dp))
 
-        Column (horizontalAlignment = Alignment.CenterHorizontally) {
-            // Username input
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Email input
             TextField(
                 value = email,
                 onValueChange = { email = it },
                 label = { Text(text = "Email Address", color = Color(0xFF767676)) },
                 shape = RoundedCornerShape(25.dp),
+                colors = TextFieldDefaults.textFieldColors(containerColor = Color.White),
                 trailingIcon = {
                     Icon(
                         imageVector = Icons.Default.MailOutline,
@@ -128,6 +153,7 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
                 onValueChange = { password = it },
                 label = { Text(text = "Password", color = Color(0xFF767676)) },
                 shape = RoundedCornerShape(25.dp),
+                colors = TextFieldDefaults.textFieldColors(containerColor = Color.White),
                 trailingIcon = {
                     Icon(
                         imageVector = Icons.Default.Lock,
@@ -144,9 +170,10 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
             // Login button
             Button(
                 onClick = {
-                    authViewModel.login(email, password)
+                    scope.launch {
+                        authViewModel.login(email, password)
+                    }
                 },
-                enabled = authState.value != AuthState.Loading,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFFD8C00),
                     contentColor = Color(0xFFFFF7F7)
@@ -164,13 +191,13 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
             Spacer(modifier = Modifier.height(20.dp))
         }
 
-        Column (horizontalAlignment = Alignment.CenterHorizontally) {
-            //Forgot Password
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Forgot Password
             Box(
                 modifier = Modifier
                     .width(280.dp)
                     .height(24.dp)
-                    .clickable { },
+                    .clickable { /* TODO: Implement forgot password functionality */ },
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Spacer(modifier = Modifier.height(4.dp))
@@ -189,9 +216,19 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            //Google Login
+            // Google Login
             Button(
-                onClick = {  },
+                onClick = {
+                    scope.launch {
+                        try {
+                            val signInIntent = googleSignInClient.signInIntent
+                            launcher.launch(signInIntent)
+                        } catch (e: Exception) {
+                            Log.e("LoginPage", "Failed to launch Google Sign-In", e)
+                            Toast.makeText(context, "Failed to start Google Sign-In", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                 contentPadding = PaddingValues(8.dp),
                 modifier = Modifier
@@ -205,7 +242,6 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
                     horizontalArrangement = Arrangement.Center,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Google Icon
                     Image(
                         painter = painterResource(id = R.drawable.google),
                         contentDescription = "Google Icon",
@@ -216,7 +252,6 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Google Login Text
                     Text(
                         text = "Continue with Google",
                         fontSize = 16.sp,
@@ -225,7 +260,6 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
                     )
                 }
             }
-
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -269,7 +303,7 @@ fun LoginPage(modifier: Modifier = Modifier, navController: NavController, authV
                     Text(
                         text = "Terms & Conditions",
                         textDecoration = TextDecoration.Underline,
-                        modifier = Modifier.clickable { },
+                        modifier = Modifier.clickable { /* TODO: Navigate to Terms & Conditions */ },
                         color = Color(0xFFFD8C00)
                     )
                 }

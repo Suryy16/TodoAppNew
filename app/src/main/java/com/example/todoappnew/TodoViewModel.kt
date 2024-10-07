@@ -27,7 +27,8 @@ class TodoViewModel : ViewModel() {
         loadTodos()
     }
 
-    private fun loadTodos() {
+    fun loadTodos(){
+//    private fun loadTodos() {
         if (userId == null) return  // Return if user is not authenticated
 
         database.addValueEventListener(object : ValueEventListener {

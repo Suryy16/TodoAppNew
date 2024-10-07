@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,24 +33,35 @@ fun TodoApp(
     todoViewModel: TodoViewModel
 ) {
     val authState by authViewModel.authState.observeAsState()
-    val todoList by todoViewModel.todoList.observeAsState(emptyList()) // Observing todo list from ViewModel
+    val todoList by todoViewModel.todoList.observeAsState(emptyList())
     var newTodoTitle by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
     LaunchedEffect(authState) {
-        if (authState is AuthState.Unauthenticated) {
-            navController.navigate("login")
+        when (authState) {
+            is AuthState.Unauthenticated -> {
+                navController.navigate("login") {
+                    popUpTo("todoApp") { inclusive = true }
+                }
+            }
+            is AuthState.Authenticated -> {
+                todoViewModel.loadTodos()
+            }
+            else -> {}
         }
     }
 
     Scaffold(
         containerColor = Color(0xFF87A2FF),
-        //Top Bar
         topBar = {
-            TopAppBar(title = {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(text = "To-Do List", fontWeight = FontWeight.Bold, color = Color.Black)
-                }
-            }, colors = TopAppBarDefaults.topAppBarColors(Color(0xFFFFD7C4)))
+            TopAppBar(
+                title = {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(text = "To-Do List", fontWeight = FontWeight.Bold, color = Color.Black)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(Color(0xFFFFD7C4))
+            )
         },
         content = { paddingValues ->
             Column(
@@ -59,11 +71,10 @@ fun TodoApp(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Display User Email
                 if (authState is AuthState.Authenticated) {
-                    val email = authState.user?.email
+                    val email = (authState as AuthState.Authenticated).user.email
                     Text(
-                        text = email,
+                        text = email ?: "Authenticated User",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Normal,
                         color = Color.Black,
@@ -71,7 +82,7 @@ fun TodoApp(
                     )
                 }
 
-                // Input field to add new todo
+
                 TextField(
                     value = newTodoTitle,
                     onValueChange = { newTodoTitle = it },
@@ -84,14 +95,13 @@ fun TodoApp(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Button to add new todo
                 Button(
                     onClick = {
                         if (newTodoTitle.isNotBlank()) {
                             todoViewModel.addTodo(TodoItem(title = newTodoTitle))
                             newTodoTitle = ""
                         } else {
-                            Toast.makeText(navController.context, "Title cannot be empty", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Title cannot be empty", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -123,7 +133,6 @@ fun TodoApp(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // LazyColumn to display todo items
                 LazyColumn(
                     modifier = Modifier.fillMaxSize()
                 ) {
