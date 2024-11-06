@@ -83,7 +83,7 @@ fun LoginPage(
         when (authState) {
             is AuthState.Authenticated -> {
                 Log.d("LoginPage", "Authentication successful, navigating to TodoApp")
-                navController.navigate("todoApp") {
+                navController.navigate("home") {
                     popUpTo("login") { inclusive = true }
                 }
             }

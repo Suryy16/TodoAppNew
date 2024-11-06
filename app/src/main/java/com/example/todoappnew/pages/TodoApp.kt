@@ -48,8 +48,6 @@ fun TodoApp(
                 todoViewModel.loadTodos()
             }
             else -> {}
-
-            //ahsiapdimans
         }
     }
 
